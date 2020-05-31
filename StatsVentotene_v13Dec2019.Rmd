@@ -1,0 +1,324 @@
+---
+title: "Ventotene_MR_MigStrategies"
+output: word_document
+author: "Silke Bauer"
+---
+Document created and analyses run on `r format(Sys.Date(), "%d %B %Y")`
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "c:/A_Dropbox/Dropbox/MigMalaria_NF/subprojects/Ventotene/Stats/MR_MigStrategy/")
+
+getwd()
+```
+
+## General
+
+Preliminary analyses, descriptive statistics etc. 
+
+
+```{r data_handling}
+
+library(lme4)
+library(arm)
+#setwd("g:/Dropbox/MigMalaria_NF/subprojects/ventotene/Stats/")
+setwd("c:/A_Dropbox/Dropbox/MigMalaria_NF/subprojects/Ventotene/Stats/MR_MigStrategy/")
+s.test <- data.frame(read.csv("MR_Parasites_2016_2017_data_21062019.csv", h=T, sep=",",fill = T))
+s.test <- s.test[1:353,1:38]
+s <- s.test
+#str(s)
+
+s$mig <- factor(s$mig, levels=c("1","2"), labels=c("short-dist","long-dist"))
+s$sex <- factor(s$sex, levels=c("1","2"), labels=c("male","female"))
+s$infection <- factor(s$infection, levels=c("0","1"), labels=c("non-inf","infected"))
+s$parasitemia <- factor(s$parasitemia, levels=c("0","1","2"), labels=c("no","low","high"))
+s$spec <- factor(s$spec, levels=c("1","2","3","4"), labels=c("EriRub","PhoOch","PhoPho","SaxRub"))
+s$spec2 <- s$spec
+
+# summary(s)
+
+# The following contrast matrix introduces groups for comparison, with 
+# 1. group compares short and long-distance migrants, 
+# 2. group compares species within short-distance migrants  
+# 3. group compares species within long-distance migrants. 
+
+mat <- model.matrix(~s$spec2, data = s); # mat
+contrasts_spec <- matrix(data=c( 0.5, 0.5, 0,
+                                 0.5,-0.5, 0,
+                                -0.5,   0, 0.5,
+                                -0.5,   0,-0.5), nrow=4, ncol=3, byrow=T)
+contrasts(s$spec2) <- contrasts_spec
+
+
+# which data do we use in the following?
+s.ex <- s[s$fat > 0,]
+d <- s.ex
+
+
+# Stichprobengr?ssen pro Art & Sex & Infection
+table(d$spec, d$sex)
+table(d$spec, d$infection)
+
+# Tables give sample sizes for BMR, PMR and all other metabolic-rate-derives output measures
+# False heisst "nicht-NA", also g?ltige Werte
+table(d$spec, is.na(d$BMR))
+table(d$spec, is.na(d$PMR30))
+table(d$spec, is.na(d$FAS30))
+table(d$spec, is.na(d$Time_exhaust))
+table(d$spec, is.na(d$hemo))
+
+
+```
+
+## Descrptive statistics for subgroups
+
+This part provides means (and standard deviations or other descriptive measures) for body masses, BMR, PMR, FAS, AAS, hemo & time-to-exhaustion for subgroups:
+- for short- and longdistance migrants
+- for both short-distance migrants
+- for both long-distance migrants
+
+
+```{r descriptives,  echo=TRUE}
+
+# Body masses original
+v <- aggregate(cbind(mass_orig_BMR, mass_orig_PMR) ~ sex + spec, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+v <- aggregate(cbind(mass_orig_BMR, mass_orig_PMR) ~ sex + mig, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+
+# BMR and mass-specific BMR
+v <- aggregate(cbind(BMR, origMassSpec.BMR) ~ sex + spec, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+v <- aggregate(cbind(BMR, origMassSpec.BMR) ~ sex + mig, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+
+# PMR and mass-specific PMR
+v <- aggregate(cbind(PMR30, origMassSpec.PMR) ~ sex + spec, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+v <- aggregate(cbind(PMR30, origMassSpec.PMR) ~ sex + mig, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+
+# FAS and AAS
+v <- aggregate(cbind(FAS30, AAS30) ~ sex + spec, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+v <- aggregate(cbind(FAS30, AAS30) ~ sex + mig, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+
+# Time to exhaustion and hemo
+v <- aggregate(cbind(Time_exhaust, hemo) ~ sex + spec, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+v <- aggregate(cbind(Time_exhaust, hemo) ~ sex + mig, data= d, FUN= function(x) c(mean = mean(x), stdev= sd(x))); v
+
+
+
+```
+
+
+
+
+## Models for body mass
+
+We calculate the following test:
+-	Test for differences in body measures (BMR, PMR) between SD, LD, species
+Body mass BMR (Body mass PMR) ~species + sex
+Oder besser: gleich mit deiner Kontrastrechnung
+Body mass BMR (Body mass PMR) ~migration + sex
+???	f?r mass_orig_BMR, massP3_BMR, massTars_BMR
+wenn Masse zwischen Arten gleich: -> im weiteren ,normale' MR-Daten und K?rpergr?ssen-skalierte Body Masse -Daten nutzen
+
+
+```{r bodymass,  echo=FALSE}
+
+# Body mass BMR
+lm1.BM <- lm(mass_orig_BMR ~ spec2 + sex, data=d); summary(lm1.BM) 
+lm1.BM <- lm(mass_orig_BMR ~ spec2 * sex, data=d); summary(lm1.BM) 
+
+# Body mass PMR 
+lm1.BM <- lm(mass_orig_PMR ~ spec2 + sex, data=d); summary(lm1.BM) 
+lm1.BM <- lm(mass_orig_PMR ~ spec2 * sex, data=d); summary(lm1.BM) 
+
+
+# Kruskal-Wallis for fat and muscle
+lm1.Fat <- lm(rank(fat) ~ 1 + spec2 + sex, data=d); summary(lm1.Fat) 
+lm1.Fat <- lm(rank(fat) ~ 1 + spec2 + infection, data=d); summary(lm1.Fat) 
+lm1.Fat <- lm(rank(fat) ~ 1 + spec2 + sex + infection, data=d); summary(lm1.Fat) 
+kruskal.test(d$fat ~ d$spec2)
+
+lm1.Muscle <- lm(rank(muscle) ~ 1 + spec2 + sex, data=d); summary(lm1.Muscle) 
+lm1.Muscle <- lm(rank(muscle) ~ 1 + spec2 + infection, data=d); summary(lm1.Muscle) 
+lm1.Muscle <- lm(rank(muscle) ~ 1 + spec2 + sex + infection, data=d); summary(lm1.Muscle) 
+kruskal.test(d$muscle ~ d$spec2)
+
+
+```
+
+
+wenn Massen zwischen Arten unterschiedlich: -> Masse-spezifische MR-Daten nutzen (O2 Verbrauch/ g K?rpermasse).
+-	Test auf Unterschiede im Hemoglobin zwischen den Strategien/Arten
+Hemoglobin ~species + sex
+-	Test auf Unterschiede im FatScore und Muscle Score zwischen den Strategien/Arten
+Fat~species + sex
+Muscle~species + sex
+
+
+```{r Models_HemoFatMuscle}
+ 
+lm1.Hemo <- lm(hemo ~ spec2 + sex, data=d); summary(lm1.Hemo) 
+lm1.Hemo <- lm(hemo ~ spec2 + sex + infection, data=d); summary(lm1.Hemo) 
+
+
+lm1.Fat <- lm(fat ~ spec2 + sex, data=d); summary(lm1.Fat) 
+lm1.Fat <- lm(fat ~ spec2 + sex + infection, data=d); summary(lm1.Fat) 
+
+
+lm1.Muscle <- lm(muscle ~ spec2 + sex, data=d); summary(lm1.Muscle) 
+lm1.Muscle <- lm(muscle ~ spec2 + sex + infection, data=d); summary(lm1.Muscle) 
+
+
+```
+
+## Plots for BMR as dependent on species, mass, sex
+
+
+```{r Plots_BMR,  echo=FALSE}
+
+par(mfcol=c(2,2), pch=16)
+ymin <- min(log10(d$BMR), na.rm=T); ymax <- max(log10(d$BMR), na.rm=T); 
+xmin <- min(d$mass_orig_BMR, na.rm=T); xmax <- max(d$mass_orig_BMR, na.rm=T); 
+cols <- c("red","orange","lightblue4","green")
+
+
+plot(log10(BMR) ~ mass_orig_BMR, data=d[d$spec=="EriRub",], ylim=c(ymin,ymax), xlim=c(xmin,xmax), col=cols[1], main="EriRub")
+plot(log10(BMR) ~ mass_orig_BMR, data=d[d$spec=="PhoOch",], ylim=c(ymin,ymax), xlim=c(xmin,xmax), col=cols[2], main="PhoOch")
+plot(log10(BMR) ~ mass_orig_BMR, data=d[d$spec=="PhoPho",], ylim=c(ymin,ymax), xlim=c(xmin,xmax), col=cols[3], main="PhoPho")
+plot(log10(BMR) ~ mass_orig_BMR, data=d[d$spec=="SaxRub",], ylim=c(ymin,ymax), xlim=c(xmin,xmax), col=cols[4], main="SaxRub")
+
+```
+
+
+# Models for Metabolic Rates (BMR, PMR, AAS, FAS)
+## Models for BMR as dependent on mig strategy, sex, hemo, etc. 
+- lgMR~migration+lg Body mass
+- lgMR~migration+sex+lg Body mass
+- lgMR~migration+hemoglobin+lg Body mass
+- lgMR~migration+sex+hemoglobin+lg Body mass
+
+- lgMR~migration+lg Body mass+infection
+- lgMR~migration+lg Body mass+infection+hemo
+
+
+```{r Models_BMR}
+
+# BMR as dependent on species and migration strategy
+
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR),              data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR) + sex,        data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR) + hemo,       data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR) + fat,        data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR) + muscle,     data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(BMR)     ~ spec2 + log10(mass_orig_BMR) + infection,  data=d); summary(lm2.BMR) 
+
+
+# Mass-spec BMR as dependent on spec2 and other vairables
+
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 ,                                   data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + fat,                              data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + muscle,                           data=d); summary(lm2.BMR) 
+
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + sex,                              data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + sex + infection,                  data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + hemo,                             data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + sex + hemo,                       data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + hemo + infection,                 data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + infection,                        data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + sex + hemo + infection,           data=d); summary(lm2.BMR) 
+
+
+# NEU NEU NEU mit body mass!!!
+
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR),           data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + sex,     data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + sex + infection, data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + hemo,   data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + sex + hemo, data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + hemo + infection, data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + infection, data=d); summary(lm2.BMR) 
+lm2.BMR <- lm(log10(origMassSpec.BMR) ~ spec2 + log10(mass_orig_BMR) + sex + hemo + infection, data=d); summary(lm2.BMR) 
+
+
+```
+
+
+
+## Models for PMR as dependent on species, mass, sex
+
+
+```{r Models_PMR}
+
+# PMR as dependent on species and migration strategy
+
+lm1.PMR <- lm(log10(PMR30)            ~ spec2 + log10(mass_orig_PMR), data=d); summary(lm1.PMR) 
+
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2,                          data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + fat,                    data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + muscle,                 data=d); summary(lm2.PMR) 
+
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + sex,                    data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + hemo,                   data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + infection,              data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + sex + infection,        data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + sex + hemo,             data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + infection + hemo,       data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + sex + infection + hemo, data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + infection * hemo,       data=d); summary(lm2.PMR) 
+
+# NEU NEU NEU NEU mit body mass!!!
+
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR),          data=d); summary(lm2.PMR)
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + sex,    data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + hemo,   data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + infection,   data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + sex + infection, data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + sex + hemo,      data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + infection + hemo,data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + sex + infection + hemo, data=d); summary(lm2.PMR) 
+lm2.PMR <- lm(log10(origMassSpec.PMR) ~ spec2 + log10(mass_orig_PMR) + infection * hemo, data=d); summary(lm2.PMR) 
+
+
+```
+
+
+
+
+## Models for AAS, FAS, time-to-exhaustion & hemoglobin as dependent on species, mass, sex
+
+
+```{r Models_Other}
+
+# Aerobic Scope as dependent on species and migration strategy
+
+lm1.AS <- lm(AAS30 ~ spec2 + log10(mass_orig_BMR),                    data=d); summary(lm1.AS) 
+lm1.AS <- lm(AAS30 ~ spec2 + log10(mass_orig_BMR) + sex,              data=d); summary(lm1.AS) 
+lm1.AS <- lm(AAS30 ~ spec2 + log10(mass_orig_BMR) + hemo,             data=d); summary(lm1.AS) 
+lm1.AS <- lm(AAS30 ~ spec2 + log10(mass_orig_BMR) + hemo + sex,       data=d); summary(lm1.AS) 
+lm1.AS <- lm(AAS30 ~ spec2 + log10(mass_orig_BMR) + hemo + infection, data=d); summary(lm1.AS) 
+
+lm1.AS <- lm(FAS30 ~ spec2 + log10(mass_orig_BMR),                    data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + log10(mass_orig_BMR) + sex,              data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + log10(mass_orig_BMR) + hemo,             data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + log10(mass_orig_BMR) + hemo + sex,       data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + log10(mass_orig_BMR) + hemo + infection, data=d); summary(lm1.AS) 
+
+lm1.AS <- lm(FAS30 ~ spec2 + sex,                    data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + hemo,                   data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + infection,              data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + hemo + infection,       data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + sex + infection,        data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + sex + hemo,             data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + sex + hemo + infection, data=d); summary(lm1.AS) 
+lm1.AS <- lm(FAS30 ~ spec2 + sex + hemo * infection, data=d); summary(lm1.AS) 
+
+
+lm5.AS <- lm(Time_exhaust ~ spec2,                          data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + hemo,                   data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + sex,                    data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + infection,              data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + hemo + sex,             data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + hemo + infection,       data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + sex + infection,        data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + infection + sex + hemo, data=d); summary(lm5.AS) 
+lm5.AS <- lm(Time_exhaust ~ spec2 + sex + hemo * infection, data=d); summary(lm5.AS) 
+
+
+```
+
